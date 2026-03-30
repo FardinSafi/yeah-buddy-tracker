@@ -1,21 +1,33 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { StreakAndQuote } from "@/components/dashboard/streak-and-quote";
 import { WeeklyProgress } from "@/components/dashboard/weekly-progress";
 import { DataControls } from "@/components/settings/data-controls";
 import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/store/auth-store";
 import { useWorkoutStore } from "@/store/workout-store";
 
 export default function Home() {
+  const router = useRouter();
+  const authInitialized = useAuthStore((state) => state.initialized);
+  const authUser = useAuthStore((state) => state.user);
   const initialized = useWorkoutStore((state) => state.initialized);
 
-  if (!initialized) {
+  useEffect(() => {
+    if (authInitialized && !authUser) {
+      router.replace("/auth/login?next=/");
+    }
+  }, [authInitialized, authUser, router]);
+
+  if (!authInitialized || (authInitialized && !authUser) || !initialized) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl items-center justify-center p-6">
-        <div className="flex items-center gap-2 text-[#d4af37]">
+      <main suppressHydrationWarning className="mx-auto flex min-h-screen w-full max-w-xl items-center justify-center p-6">
+        <div suppressHydrationWarning className="flex items-center gap-2 text-[#d4af37]">
           <LoaderCircle className="h-5 w-5 animate-spin" />
           <span className="text-lg">Loading your plates...</span>
         </div>
@@ -24,7 +36,7 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-xl space-y-5 bg-[radial-gradient(circle_at_top,_#1c1508_0%,_#0a0a0a_50%)] p-4 pb-10">
+    <main suppressHydrationWarning className="mx-auto min-h-screen w-full max-w-xl space-y-5 bg-[radial-gradient(circle_at_top,_#1c1508_0%,_#0a0a0a_50%)] p-4 pb-10">
       <DashboardHeader />
       <StreakAndQuote />
       <WeeklyProgress />

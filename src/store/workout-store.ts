@@ -3,10 +3,10 @@
 import { create } from "zustand";
 import { randomQuote } from "@/data/quotes";
 import { ensureSeedData } from "@/lib/db/seed";
-import { workoutRepository } from "@/lib/repositories/workout-repository";
+import { workoutRepository } from "../lib/repositories/workout-repository";
 import { playYeahBuddySound } from "@/lib/utils/audio";
 import { getRangeIsoForRecentWeeks, getRecentWeekKeys, getWeekKey, toIsoDayKey } from "@/lib/utils/date";
-import { buildExportPayload, downloadJsonFile, importFromJsonText } from "@/lib/utils/export-import";
+import { downloadJsonFile, parseImportPayload } from "@/lib/utils/export-import";
 import {
   buildExerciseProgression,
   buildMuscleGroupHistory,
@@ -67,6 +67,9 @@ type WorkoutStore = {
   isHistoryLoading: boolean;
   isAnalyticsLoading: boolean;
   isMuted: boolean;
+  syncQueuedCount: number;
+  syncFailedCount: number;
+  syncSyncingCount: number;
   workouts: Workout[];
   muscleGroups: MuscleGroup[];
   exercises: Exercise[];
@@ -86,6 +89,8 @@ type WorkoutStore = {
   selectHistoryWeek: (weekKey: string) => void;
   refreshAnalytics: (weekCount?: number) => Promise<void>;
   refreshExerciseProgression: (exerciseId: string, weekCount?: number) => Promise<void>;
+  refreshSyncStatus: () => Promise<void>;
+  syncPendingChanges: () => Promise<void>;
   saveWorkout: (input: WorkoutInput) => Promise<void>;
   setMuted: (muted: boolean) => Promise<void>;
   closeCelebration: () => void;
@@ -166,6 +171,9 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   isHistoryLoading: false,
   isAnalyticsLoading: false,
   isMuted: false,
+  syncQueuedCount: 0,
+  syncFailedCount: 0,
+  syncSyncingCount: 0,
   workouts: [],
   muscleGroups: [],
   exercises: [],
@@ -181,7 +189,16 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   celebration: { open: false, muscleGroupName: "", quote: "" },
 
   bootstrap: async () => {
-    await ensureSeedData();
+    try {
+      await ensureSeedData();
+      await workoutRepository.syncPendingChanges();
+    } catch (error) {
+      const message = workoutRepository.asErrorMessage(error, "");
+      if (message.toLowerCase().includes("signed in")) {
+        return;
+      }
+      throw error;
+    }
 
     const data = await workoutRepository.getBootstrapData();
     const { weeklyStats, weeklyStreak } = toWeeklyState(data.workouts, data.muscleGroups);
@@ -197,7 +214,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       quoteOfTheRefresh: randomQuote(),
     });
 
-    await Promise.all([get().refreshHistory(DEFAULT_HISTORY_WEEKS), get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS)]);
+    await Promise.all([
+      get().refreshHistory(DEFAULT_HISTORY_WEEKS),
+      get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS),
+      get().refreshSyncStatus(),
+    ]);
   },
 
   refreshStats: async () => {
@@ -257,6 +278,45 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     });
   },
 
+  refreshSyncStatus: async () => {
+    try {
+      const status = await workoutRepository.getSyncQueueStatus();
+      set({
+        syncQueuedCount: status.queuedCount,
+        syncFailedCount: status.failedCount,
+        syncSyncingCount: status.syncingCount,
+      });
+    } catch {
+      set({
+        syncQueuedCount: 0,
+        syncFailedCount: 0,
+        syncSyncingCount: 0,
+      });
+    }
+  },
+
+  syncPendingChanges: async () => {
+    await workoutRepository.syncPendingChanges();
+
+    const data = await workoutRepository.getBootstrapData();
+    const { weeklyStats, weeklyStreak } = toWeeklyState(data.workouts, data.muscleGroups);
+
+    set({
+      workouts: data.workouts,
+      muscleGroups: data.muscleGroups,
+      exercises: data.exercises,
+      isMuted: data.isMuted,
+      weeklyStats,
+      weeklyStreak,
+    });
+
+    await Promise.all([
+      get().refreshHistory(DEFAULT_HISTORY_WEEKS),
+      get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS),
+      get().refreshSyncStatus(),
+    ]);
+  },
+
   saveWorkout: async (input) => {
     set({ isSaving: true });
     try {
@@ -284,7 +344,11 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         weeklyStreak,
       });
 
-      await Promise.all([get().refreshHistory(DEFAULT_HISTORY_WEEKS), get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS)]);
+      await Promise.all([
+        get().refreshHistory(DEFAULT_HISTORY_WEEKS),
+        get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS),
+        get().refreshSyncStatus(),
+      ]);
 
       if (get().selectedExerciseId === input.exerciseId) {
         await get().refreshExerciseProgression(input.exerciseId, DEFAULT_ANALYTICS_WEEKS);
@@ -319,6 +383,7 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   setMuted: async (muted) => {
     await workoutRepository.setMuted(muted);
     set({ isMuted: muted });
+    await get().refreshSyncStatus();
   },
 
   closeCelebration: () => {
@@ -326,13 +391,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   },
 
   exportJson: async () => {
-    const payload = await buildExportPayload();
+    const payload = await workoutRepository.buildUserExportPayload();
     downloadJsonFile(payload);
   },
 
   importJsonFile: async (file) => {
     const text = await file.text();
-    await importFromJsonText(text);
+    const payload = parseImportPayload(text);
+    await workoutRepository.replaceAllUserData(payload.data);
     await get().bootstrap();
   },
 }));

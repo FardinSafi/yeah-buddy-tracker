@@ -3,13 +3,32 @@
 import { useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { useWorkoutBootstrap } from "@/hooks/use-workout-bootstrap";
+import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/auth-store";
 import { useWorkoutStore } from "@/store/workout-store";
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   useWorkoutBootstrap();
+  const refreshSession = useAuthStore((state) => state.refreshSession);
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const celebration = useWorkoutStore((state) => state.celebration);
   const closeCelebration = useWorkoutStore((state) => state.closeCelebration);
+
+  useEffect(() => {
+    void refreshSession();
+
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuth(session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [refreshSession, setAuth]);
 
   useEffect(() => {
     if (!celebration.open) {

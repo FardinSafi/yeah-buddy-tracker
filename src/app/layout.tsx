@@ -28,8 +28,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`}>
+    <html lang="en" className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`} suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className="min-h-full bg-[#0a0a0a] text-[#f4f4f4]"
         style={
           ENABLE_APP_WALLPAPER

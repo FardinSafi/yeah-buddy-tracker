@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { LoaderCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { WorkoutLogger } from "@/components/workout/workout-logger";
@@ -7,6 +8,23 @@ import { useWorkoutStore } from "@/store/workout-store";
 import { MUSCLE_GROUP_IDS, type MuscleGroupId } from "@/types/domain";
 
 export default function WorkoutLogPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex min-h-screen w-full max-w-xl items-center justify-center p-6">
+          <div className="flex items-center gap-2 text-[#d4af37]">
+            <LoaderCircle className="h-5 w-5 animate-spin" />
+            <span className="text-lg">Preparing workout logger...</span>
+          </div>
+        </main>
+      }
+    >
+      <WorkoutLogPageContent />
+    </Suspense>
+  );
+}
+
+function WorkoutLogPageContent() {
   const initialized = useWorkoutStore((state) => state.initialized);
   const searchParams = useSearchParams();
   const muscleGroupIdParam = searchParams.get("muscleGroupId");

@@ -2,7 +2,6 @@ import {
   db,
   type SyncQueueItem,
   type SyncQueueMilestonePayload,
-  type SyncQueueMuscleGroupPayload,
   type SyncQueueSettingPayload,
   type SyncQueueWorkoutPayload,
 } from "../db/database";

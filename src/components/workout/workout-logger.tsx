@@ -7,6 +7,7 @@ import { ExerciseStep } from "@/components/workout/exercise-step";
 import { MuscleGroupStep } from "@/components/workout/muscle-group-step";
 import { SetsStep } from "@/components/workout/sets-step";
 import { useWorkoutStore } from "@/store/workout-store";
+import { toIsoDayKey } from "@/lib/utils/date";
 import type { MuscleGroupId, WorkoutSet } from "@/types/domain";
 
 const DEFAULT_SET: WorkoutSet = { reps: 10, weightKg: 20 };
@@ -15,10 +16,17 @@ type WorkoutLoggerProps = {
   initialMuscleGroupId?: MuscleGroupId;
 };
 
+type TodayLoggedExerciseSummary = {
+  exerciseId: string;
+  exerciseName: string;
+  count: number;
+};
+
 export function WorkoutLogger({ initialMuscleGroupId }: WorkoutLoggerProps) {
   const router = useRouter();
   const muscleGroups = useWorkoutStore((state) => state.muscleGroups);
   const exercises = useWorkoutStore((state) => state.exercises);
+  const workouts = useWorkoutStore((state) => state.workouts);
   const saveWorkout = useWorkoutStore((state) => state.saveWorkout);
   const isSaving = useWorkoutStore((state) => state.isSaving);
 
@@ -32,6 +40,36 @@ export function WorkoutLogger({ initialMuscleGroupId }: WorkoutLoggerProps) {
   const selectedExerciseName = useMemo(() => {
     return exercises.find((exercise) => exercise.id === exerciseId)?.name ?? "";
   }, [exerciseId, exercises]);
+
+  const todayLoggedExercises = useMemo<TodayLoggedExerciseSummary[]>(() => {
+    if (!muscleGroupId) {
+      return [];
+    }
+
+    const todayKey = toIsoDayKey(new Date().toISOString());
+    const exerciseNameMap = new Map(exercises.map((exercise) => [exercise.id, exercise.name]));
+    const counts = new Map<string, number>();
+
+    for (const workout of workouts) {
+      if (workout.muscleGroupId !== muscleGroupId) {
+        continue;
+      }
+
+      if (toIsoDayKey(workout.dateIso) !== todayKey) {
+        continue;
+      }
+
+      counts.set(workout.exerciseId, (counts.get(workout.exerciseId) ?? 0) + 1);
+    }
+
+    return [...counts.entries()]
+      .map(([loggedExerciseId, count]) => ({
+        exerciseId: loggedExerciseId,
+        exerciseName: exerciseNameMap.get(loggedExerciseId) ?? "Unknown exercise",
+        count,
+      }))
+      .sort((a, b) => b.count - a.count || a.exerciseName.localeCompare(b.exerciseName));
+  }, [exercises, muscleGroupId, workouts]);
 
   function updateSet(index: number, key: "reps" | "weightKg", value: number) {
     setSets((prev) =>
@@ -85,6 +123,7 @@ export function WorkoutLogger({ initialMuscleGroupId }: WorkoutLoggerProps) {
             muscleGroupId={muscleGroupId}
             query={searchQuery}
             selectedExerciseId={exerciseId}
+            todayLoggedExercises={todayLoggedExercises}
             onQueryChange={setSearchQuery}
             onSelect={setExerciseId}
           />

@@ -4,11 +4,18 @@ import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import type { Exercise, MuscleGroupId } from "@/types/domain";
 
+type TodayLoggedExerciseSummary = {
+  exerciseId: string;
+  exerciseName: string;
+  count: number;
+};
+
 type ExerciseStepProps = {
   exercises: Exercise[];
   muscleGroupId: MuscleGroupId;
   query: string;
   selectedExerciseId?: string;
+  todayLoggedExercises: TodayLoggedExerciseSummary[];
   onQueryChange: (query: string) => void;
   onSelect: (exerciseId: string) => void;
 };
@@ -18,6 +25,7 @@ export function ExerciseStep({
   muscleGroupId,
   query,
   selectedExerciseId,
+  todayLoggedExercises,
   onQueryChange,
   onSelect,
 }: ExerciseStepProps) {
@@ -30,6 +38,25 @@ export function ExerciseStep({
 
   return (
     <div className="space-y-3">
+      {todayLoggedExercises.length > 0 ? (
+        <div className="rounded-xl border border-[#4b3a14] bg-[#1a160b] p-3">
+          <p className="text-xs uppercase tracking-[0.2em] text-[#d4af37]">Already logged today</p>
+          <div className="mt-3 space-y-2">
+            {todayLoggedExercises.map((exercise) => (
+              <div
+                key={exercise.exerciseId}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[#3b3120] bg-[#111111] px-3 py-2"
+              >
+                <span className="text-sm font-medium text-[#f4e3b1]">{exercise.exerciseName}</span>
+                <span className="rounded-full border border-[#5f4d20] bg-[#201a0a] px-2 py-0.5 text-xs font-semibold text-[#e0c46b]">
+                  {exercise.count}x
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <Input
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}

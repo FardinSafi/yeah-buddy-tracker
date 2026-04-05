@@ -22,8 +22,8 @@ export function DashboardHeader() {
   return (
     <header className="flex items-center justify-between rounded-2xl border border-[#362c10] bg-gradient-to-r from-[#101010] to-[#17130a] p-4">
       <div>
-        <p className="text-xs tracking-[0.28em] text-[#b91c1c] uppercase">Yeah Buddy Tracker</p>
-        <h1 className="text-2xl font-black tracking-wide text-[#f6e6b3]">Yeah Buddy</h1>
+        <p className="text-xs tracking-[0.28em] text-[#b91c1c] uppercase">Yeah Buddy</p>
+        <h1 className="text-2xl font-black tracking-wide text-[#f6e6b3]">Light Weight</h1>
         {email ? <p className="mt-1 text-xs text-[#c7b274]">{email}</p> : null}
         <p className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${syncBadgeClass}`}>
           {syncLabel}

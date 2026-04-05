@@ -21,6 +21,7 @@ export function WeeklyProgress() {
               targetKg={stat.targetKg}
               percent={stat.percent}
               accentColor={group?.accentColor ?? "#D4AF37"}
+              href={`/workout-log?muscleGroupId=${stat.muscleGroupId}`}
             />
           );
         })}

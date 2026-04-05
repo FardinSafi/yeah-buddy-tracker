@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 
 type ProgressRingProps = {
@@ -8,15 +9,16 @@ type ProgressRingProps = {
   targetKg: number;
   percent: number;
   accentColor: string;
+  href?: string;
 };
 
 const RADIUS = 32;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-export function ProgressRing({ name, tonnageKg, targetKg, percent, accentColor }: ProgressRingProps) {
+export function ProgressRing({ name, tonnageKg, targetKg, percent, accentColor, href }: ProgressRingProps) {
   const strokeOffset = CIRCUMFERENCE - (Math.min(percent, 100) / 100) * CIRCUMFERENCE;
 
-  return (
+  const content = (
     <motion.div
       className="flex w-full flex-col items-center gap-2 rounded-2xl border border-[#2a2a2a] bg-[#111111] p-3"
       animate={{ scale: [1, 1.03, 1] }}
@@ -43,7 +45,19 @@ export function ProgressRing({ name, tonnageKg, targetKg, percent, accentColor }
         </text>
       </svg>
       <p className="text-xs font-semibold tracking-wide text-[#f3e5bc]">{name}</p>
-      <p className="text-[11px] text-[#c2c2c2]">{tonnageKg.toLocaleString()} / {targetKg.toLocaleString()} kg</p>
+      <p className="text-[11px] text-[#c2c2c2]">
+        {tonnageKg.toLocaleString()} / {targetKg.toLocaleString()} kg
+      </p>
     </motion.div>
+  );
+
+  if (!href) {
+    return content;
+  }
+
+  return (
+    <Link href={href} prefetch className="block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[#d4af37] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]">
+      {content}
+    </Link>
   );
 }

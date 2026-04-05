@@ -1,11 +1,18 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { WorkoutLogger } from "@/components/workout/workout-logger";
 import { useWorkoutStore } from "@/store/workout-store";
+import { MUSCLE_GROUP_IDS, type MuscleGroupId } from "@/types/domain";
 
 export default function WorkoutLogPage() {
   const initialized = useWorkoutStore((state) => state.initialized);
+  const searchParams = useSearchParams();
+  const muscleGroupIdParam = searchParams.get("muscleGroupId");
+  const initialMuscleGroupId = MUSCLE_GROUP_IDS.includes(muscleGroupIdParam as MuscleGroupId)
+    ? (muscleGroupIdParam as MuscleGroupId)
+    : undefined;
 
   if (!initialized) {
     return (
@@ -20,7 +27,7 @@ export default function WorkoutLogPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1c1508_0%,_#0a0a0a_45%)]">
-      <WorkoutLogger />
+      <WorkoutLogger initialMuscleGroupId={initialMuscleGroupId} />
     </main>
   );
 }

@@ -11,15 +11,19 @@ import type { MuscleGroupId, WorkoutSet } from "@/types/domain";
 
 const DEFAULT_SET: WorkoutSet = { reps: 10, weightKg: 20 };
 
-export function WorkoutLogger() {
+type WorkoutLoggerProps = {
+  initialMuscleGroupId?: MuscleGroupId;
+};
+
+export function WorkoutLogger({ initialMuscleGroupId }: WorkoutLoggerProps) {
   const router = useRouter();
   const muscleGroups = useWorkoutStore((state) => state.muscleGroups);
   const exercises = useWorkoutStore((state) => state.exercises);
   const saveWorkout = useWorkoutStore((state) => state.saveWorkout);
   const isSaving = useWorkoutStore((state) => state.isSaving);
 
-  const [step, setStep] = useState(1);
-  const [muscleGroupId, setMuscleGroupId] = useState<MuscleGroupId | undefined>(undefined);
+  const [step, setStep] = useState(initialMuscleGroupId ? 2 : 1);
+  const [muscleGroupId, setMuscleGroupId] = useState<MuscleGroupId | undefined>(initialMuscleGroupId);
   const [exerciseId, setExerciseId] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [sets, setSets] = useState<WorkoutSet[]>([{ ...DEFAULT_SET }]);

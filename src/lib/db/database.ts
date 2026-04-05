@@ -2,7 +2,7 @@ import Dexie, { type Table } from "dexie";
 import type { AppSettings, Exercise, MilestoneEvent, MuscleGroup, Workout } from "@/types/domain";
 
 export type SyncQueueStatus = "pending" | "syncing" | "failed";
-export type SyncEntityType = "workout" | "milestone" | "setting";
+export type SyncEntityType = "workout" | "milestone" | "setting" | "muscleGroup";
 
 export type SyncQueueWorkoutPayload = {
   workout: Workout;
@@ -19,10 +19,16 @@ export type SyncQueueSettingPayload = {
   isMuted: boolean;
 };
 
+export type SyncQueueMuscleGroupPayload = {
+  muscleGroupId: MuscleGroup["id"];
+  weeklyTargetKg: number;
+};
+
 export type SyncQueuePayload =
   | SyncQueueWorkoutPayload
   | SyncQueueMilestonePayload
-  | SyncQueueSettingPayload;
+  | SyncQueueSettingPayload
+  | SyncQueueMuscleGroupPayload;
 
 export type SyncQueueItem = {
   id?: number;
@@ -72,7 +78,6 @@ export class YeahBuddyDatabase extends Dexie {
       milestoneEvents: "++id, weekKey, muscleGroupId, [weekKey+muscleGroupId]",
       syncQueue: "++id, userId, status, entityType, createdAtIso, nextAttemptAtIso, [userId+status]",
     });
-
   }
 }
 

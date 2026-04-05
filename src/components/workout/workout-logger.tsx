@@ -63,7 +63,6 @@ export function WorkoutLogger({ initialMuscleGroupId }: WorkoutLoggerProps) {
     <div className="mx-auto w-full max-w-lg space-y-4 p-4 pb-10">
       <div className="rounded-2xl border border-[#352f1e] bg-[#14120c] p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-[#d4af37]">Log Today&apos;s Workout</p>
-        <h1 className="text-xl font-bold text-[#f4e3b1]">Step {step} of 3</h1>
         {selectedExerciseName ? <p className="mt-1 text-sm text-[#b5b5b5]">{selectedExerciseName}</p> : null}
       </div>
 

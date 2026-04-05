@@ -2,9 +2,10 @@ import {
   db,
   type SyncQueueItem,
   type SyncQueueMilestonePayload,
+  type SyncQueueMuscleGroupPayload,
   type SyncQueueSettingPayload,
   type SyncQueueWorkoutPayload,
-} from "@/lib/db/database";
+} from "../db/database";
 import { createClient } from "@/lib/supabase/client";
 import { getRangeIsoForRecentWeeks, getWeekKey } from "@/lib/utils/date";
 import type { AppSettings, Exercise, ExportPayload, MilestoneEvent, MuscleGroup, Workout } from "@/types/domain";
@@ -109,6 +110,23 @@ function toWorkoutRow(userId: string, workout: Workout) {
     notes: workout.notes ?? null,
     created_at_iso: workout.createdAtIso,
   };
+}
+
+async function persistMuscleGroupTarget(userId: string, muscleGroupId: MuscleGroup["id"], weeklyTargetKg: number) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("muscle_groups")
+    .update({ weekly_target_kg: weeklyTargetKg })
+    .eq("user_id", userId)
+    .eq("id", muscleGroupId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return toMuscleGroup(data as MuscleGroupRow);
 }
 
 function isOnline(): boolean {
@@ -546,6 +564,37 @@ export const workoutRepository = {
     }
 
     await upsertAppSettings({ userId, isMuted, unit: "kg", id: "settings" });
+  },
+
+  async updateMuscleGroupTarget(
+    muscleGroupId: MuscleGroup["id"],
+    weeklyTargetKg: number,
+  ): Promise<MuscleGroup> {
+    const userId = await getAuthenticatedUserId();
+    const existing = await db.muscleGroups.get(muscleGroupId);
+
+    if (!existing) {
+      throw new Error("Muscle group not found.");
+    }
+
+    if (!isOnline()) {
+      const next = { ...existing, weeklyTargetKg };
+      await db.muscleGroups.put(next);
+      await queueItem({
+        userId,
+        status: "pending",
+        entityType: "muscleGroup",
+        payload: { muscleGroupId, weeklyTargetKg },
+        createdAtIso: nowIso(),
+        nextAttemptAtIso: nowIso(),
+        retries: 0,
+      });
+      return next;
+    }
+
+    const updated = await persistMuscleGroupTarget(userId, muscleGroupId, weeklyTargetKg);
+    await db.muscleGroups.put(updated);
+    return updated;
   },
 
   async createMilestoneEvent(muscleGroupId: MuscleGroup["id"]): Promise<void> {

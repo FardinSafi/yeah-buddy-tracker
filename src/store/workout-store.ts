@@ -92,6 +92,7 @@ type WorkoutStore = {
   refreshSyncStatus: () => Promise<void>;
   syncPendingChanges: () => Promise<void>;
   saveWorkout: (input: WorkoutInput) => Promise<void>;
+  updateMuscleGroupTarget: (muscleGroupId: MuscleGroup["id"], weeklyTargetKg: number) => Promise<void>;
   setMuted: (muted: boolean) => Promise<void>;
   closeCelebration: () => void;
   exportJson: () => Promise<void>;
@@ -378,6 +379,16 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     } finally {
       set({ isSaving: false });
     }
+  },
+
+  updateMuscleGroupTarget: async (muscleGroupId, weeklyTargetKg) => {
+    const updatedGroup = await workoutRepository.updateMuscleGroupTarget(muscleGroupId, weeklyTargetKg);
+    const muscleGroups = get().muscleGroups.map((group) => (group.id === muscleGroupId ? updatedGroup : group));
+    const { weeklyStats, weeklyStreak } = toWeeklyState(get().workouts, muscleGroups);
+    const muscleGroupHistory = buildMuscleGroupHistory(get().workouts, muscleGroups, DEFAULT_ANALYTICS_WEEKS);
+
+    set({ muscleGroups, weeklyStats, weeklyStreak, muscleGroupHistory });
+    await get().refreshSyncStatus();
   },
 
   setMuted: async (muted) => {

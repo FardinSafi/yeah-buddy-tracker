@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ExerciseLibrary } from "@/components/settings/exercise-library";
 import { useAuthStore } from "@/store/auth-store";
 import { useWorkoutStore } from "@/store/workout-store";
 
@@ -132,6 +133,10 @@ export default function SettingsPage() {
             Export your data to create a backup or transfer to another device. Import from a previously exported file.
           </p>
         </Card>
+
+        <div className="mt-8">
+          <ExerciseLibrary mode="full" />
+        </div>
 
         {/* Footer */}
         <div className="mt-12 border-t border-[#2a2a2a] pt-8">

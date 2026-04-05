@@ -103,6 +103,14 @@ type WorkoutStore = {
   refreshExerciseProgression: (exerciseId: string, weekCount?: number) => Promise<void>;
   refreshSyncStatus: () => Promise<void>;
   syncPendingChanges: () => Promise<void>;
+  findSimilarExercises: (
+    muscleGroupId: MuscleGroup["id"],
+    name: string,
+    excludeExerciseId?: string,
+  ) => Promise<Exercise[]>;
+  createExercise: (muscleGroupId: MuscleGroup["id"], name: string) => Promise<Exercise>;
+  updateExerciseName: (exerciseId: string, name: string) => Promise<Exercise>;
+  deleteExercise: (exerciseId: string) => Promise<void>;
   saveWorkout: (input: WorkoutInput) => Promise<void>;
   updateMuscleGroupTarget: (muscleGroupId: MuscleGroup["id"], weeklyTargetKg: number) => Promise<void>;
   setMuted: (muted: boolean) => Promise<void>;
@@ -329,6 +337,44 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       get().refreshAnalytics(DEFAULT_ANALYTICS_WEEKS),
       get().refreshSyncStatus(),
     ]);
+  },
+
+  findSimilarExercises: async (muscleGroupId, name, excludeExerciseId) => {
+    return workoutRepository.findSimilarExercisesForMuscleGroup(muscleGroupId, name, excludeExerciseId);
+  },
+
+  createExercise: async (muscleGroupId, name) => {
+    const created = await workoutRepository.createExercise({ muscleGroupId, name });
+
+    set((state) => ({
+      exercises: [...state.exercises, created].sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+
+    await get().refreshSyncStatus();
+    return created;
+  },
+
+  updateExerciseName: async (exerciseId, name) => {
+    const updated = await workoutRepository.updateExerciseName(exerciseId, name);
+
+    set((state) => ({
+      exercises: state.exercises
+        .map((exercise) => (exercise.id === exerciseId ? updated : exercise))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+
+    await get().refreshSyncStatus();
+    return updated;
+  },
+
+  deleteExercise: async (exerciseId) => {
+    await workoutRepository.deleteExercise(exerciseId);
+
+    set((state) => ({
+      exercises: state.exercises.filter((exercise) => exercise.id !== exerciseId),
+    }));
+
+    await get().refreshSyncStatus();
   },
 
   saveWorkout: async (input) => {

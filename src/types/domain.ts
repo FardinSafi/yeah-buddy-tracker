@@ -13,6 +13,7 @@ export type Exercise = {
   id: string;
   name: string;
   muscleGroupId: MuscleGroupId;
+  isCustom?: boolean;
 };
 
 export type WorkoutSet = {

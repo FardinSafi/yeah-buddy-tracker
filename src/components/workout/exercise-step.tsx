@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
+import { ExerciseLibrary } from "@/components/settings/exercise-library";
 import type { Exercise, MuscleGroupId } from "@/types/domain";
 
 type TodayLoggedExerciseSummary = {
@@ -63,6 +64,20 @@ export function ExerciseStep({
         placeholder="Search exercise"
         className="h-12 border-[#2f2f2f] bg-[#101010] text-[#f5f5f5]"
       />
+
+      <details className="rounded-xl border border-[#2a2a2a] bg-[#111111] p-3">
+        <summary className="cursor-pointer rounded-lg border border-[#3d3d3d] bg-[#0f0f0f] px-3 py-2 text-center text-sm font-medium text-[#ddd]">
+          Add Exercise To This Body Part
+        </summary>
+        <div className="mt-3">
+          <ExerciseLibrary
+            mode="add-only"
+            initialMuscleGroupId={muscleGroupId}
+            onExerciseAdded={(exerciseId) => onSelect(exerciseId)}
+          />
+        </div>
+      </details>
+
       <div className="max-h-[50vh] space-y-2 overflow-auto pr-1">
         {filtered.map((exercise) => (
           <button

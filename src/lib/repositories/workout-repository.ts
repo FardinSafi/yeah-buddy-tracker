@@ -1,11 +1,14 @@
 import {
   db,
+  type SyncQueueExercisePayload,
   type SyncQueueItem,
   type SyncQueueMilestonePayload,
+  type SyncQueueMuscleGroupPayload,
   type SyncQueueSettingPayload,
   type SyncQueueWorkoutPayload,
 } from "../db/database";
 import { createClient } from "@/lib/supabase/client";
+import { findConservativeExerciseMatches, normalizeExerciseName } from "@/lib/utils/exercise-name";
 import { getRangeIsoForRecentWeeks, getWeekKey } from "@/lib/utils/date";
 import type { AppSettings, Exercise, ExportPayload, MilestoneEvent, MuscleGroup, Workout } from "@/types/domain";
 
@@ -22,6 +25,7 @@ type ExerciseRow = {
   user_id: string;
   name: string;
   muscle_group_id: MuscleGroup["id"];
+  is_custom?: boolean;
 };
 
 type WorkoutRow = {
@@ -67,6 +71,17 @@ function toExercise(row: ExerciseRow): Exercise {
     id: row.id,
     name: row.name,
     muscleGroupId: row.muscle_group_id,
+    isCustom: Boolean(row.is_custom),
+  };
+}
+
+function toExerciseRow(userId: string, exercise: Exercise) {
+  return {
+    user_id: userId,
+    id: exercise.id,
+    name: exercise.name,
+    muscle_group_id: exercise.muscleGroupId,
+    is_custom: exercise.isCustom ?? false,
   };
 }
 
@@ -134,6 +149,13 @@ function isOnline(): boolean {
 
 function createLocalTempId(): number {
   return -Math.floor(Date.now() * 1000 + Math.random() * 1000);
+}
+
+function createCustomExerciseId(muscleGroupId: MuscleGroup["id"], name: string): string {
+  const slug = normalizeExerciseName(name).replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 36);
+  const safeSlug = slug || "custom";
+  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return `${muscleGroupId}-${safeSlug}-${suffix}`;
 }
 
 async function getAuthenticatedUserId(): Promise<string> {
@@ -353,6 +375,45 @@ async function getPendingWorkoutEntries(userId: string): Promise<Workout[]> {
     });
 }
 
+async function getPendingExerciseMutations(userId: string): Promise<SyncQueueItem[]> {
+  const records = await db.syncQueue.where("userId").equals(userId).sortBy("createdAtIso");
+  return records.filter(
+    (record) =>
+      (record.status === "pending" || record.status === "failed" || record.status === "syncing") &&
+      record.entityType === "exercise",
+  );
+}
+
+function applyPendingExerciseMutations(exercises: Exercise[], queueItems: SyncQueueItem[]): Exercise[] {
+  const map = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+
+  for (const item of queueItems) {
+    const payload = item.payload as SyncQueueExercisePayload;
+
+    if (payload.action === "create") {
+      map.set(payload.exercise.id, payload.exercise);
+      continue;
+    }
+
+    if (payload.action === "update") {
+      const existing = map.get(payload.exerciseId);
+      if (!existing) {
+        continue;
+      }
+
+      map.set(payload.exerciseId, {
+        ...existing,
+        name: payload.name,
+      });
+      continue;
+    }
+
+    map.delete(payload.exerciseId);
+  }
+
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function setQueueStatus(id: number, status: SyncQueueItem["status"], lastError?: string) {
   const existing = await db.syncQueue.get(id);
   if (!existing) {
@@ -396,6 +457,48 @@ async function syncQueueItem(userId: string, item: SyncQueueItem): Promise<void>
   if (item.entityType === "setting") {
     const payload = item.payload as SyncQueueSettingPayload;
     await upsertAppSettings({ userId, isMuted: payload.isMuted, unit: "kg", id: "settings" });
+
+    return;
+  }
+
+  if (item.entityType === "muscleGroup") {
+    const payload = item.payload as SyncQueueMuscleGroupPayload;
+    await persistMuscleGroupTarget(userId, payload.muscleGroupId, payload.weeklyTargetKg);
+    return;
+  }
+
+  if (item.entityType === "exercise") {
+    const payload = item.payload as SyncQueueExercisePayload;
+
+    if (payload.action === "create") {
+      const { error } = await supabase.from("exercises").insert(toExerciseRow(userId, payload.exercise));
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return;
+    }
+
+    if (payload.action === "update") {
+      const { error } = await supabase
+        .from("exercises")
+        .update({ name: payload.name })
+        .eq("user_id", userId)
+        .eq("id", payload.exerciseId);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return;
+    }
+
+    const { error } = await supabase.from("exercises").delete().eq("user_id", userId).eq("id", payload.exerciseId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
 
     return;
   }
@@ -448,16 +551,220 @@ export const workoutRepository = {
     const mergedWorkouts = [...workouts, ...pendingWorkouts].sort((a, b) => a.dateIso.localeCompare(b.dateIso));
     const muscleGroups = (muscleGroupsResult.data ?? []).map((row) => toMuscleGroup(row as MuscleGroupRow));
     const exercises = (exercisesResult.data ?? []).map((row) => toExercise(row as ExerciseRow));
+    const pendingExerciseMutations = await getPendingExerciseMutations(userId);
+    const mergedExercises = applyPendingExerciseMutations(exercises, pendingExerciseMutations);
     const settings = settingsData ? toAppSettings(settingsData) : ({ id: "settings", isMuted: false, unit: "kg" } as AppSettings);
 
-    await putCacheFromRemote({ workouts: mergedWorkouts, muscleGroups, exercises, settings });
+    await putCacheFromRemote({ workouts: mergedWorkouts, muscleGroups, exercises: mergedExercises, settings });
 
     return {
       workouts: mergedWorkouts,
       muscleGroups,
-      exercises,
+      exercises: mergedExercises,
       isMuted: settings.isMuted,
     };
+  },
+
+  async findSimilarExercisesForMuscleGroup(
+    muscleGroupId: MuscleGroup["id"],
+    name: string,
+    excludeExerciseId?: string,
+  ): Promise<Exercise[]> {
+    const allExercises = await db.exercises.toArray();
+    return findConservativeExerciseMatches({
+      name,
+      exercises: allExercises,
+      muscleGroupId,
+      excludeExerciseId,
+    });
+  },
+
+  async createExercise(params: { muscleGroupId: MuscleGroup["id"]; name: string }): Promise<Exercise> {
+    const userId = await getAuthenticatedUserId();
+    const normalizedName = normalizeExerciseName(params.name);
+
+    if (!normalizedName) {
+      throw new Error("Exercise name is required.");
+    }
+
+    const allExercises = await db.exercises.toArray();
+    const exactDuplicate = allExercises.some(
+      (exercise) =>
+        exercise.muscleGroupId === params.muscleGroupId && normalizeExerciseName(exercise.name) === normalizedName,
+    );
+
+    if (exactDuplicate) {
+      throw new Error("An exercise with this name already exists for this body part.");
+    }
+
+    const exercise: Exercise = {
+      id: createCustomExerciseId(params.muscleGroupId, normalizedName),
+      muscleGroupId: params.muscleGroupId,
+      name: params.name.trim(),
+      isCustom: true,
+    };
+
+    if (!isOnline()) {
+      await db.exercises.put(exercise);
+      await queueItem({
+        userId,
+        status: "pending",
+        entityType: "exercise",
+        payload: {
+          action: "create",
+          exercise,
+        },
+        createdAtIso: nowIso(),
+        nextAttemptAtIso: nowIso(),
+        retries: 0,
+      });
+      return exercise;
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("exercises")
+      .insert(toExerciseRow(userId, exercise))
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const saved = toExercise(data as ExerciseRow);
+    await db.exercises.put(saved);
+    return saved;
+  },
+
+  async updateExerciseName(exerciseId: string, name: string): Promise<Exercise> {
+    const userId = await getAuthenticatedUserId();
+    const normalizedName = normalizeExerciseName(name);
+
+    if (!normalizedName) {
+      throw new Error("Exercise name is required.");
+    }
+
+    const existing = await db.exercises.get(exerciseId);
+
+    if (!existing) {
+      throw new Error("Exercise not found.");
+    }
+
+    if (!existing.isCustom) {
+      throw new Error("Default exercises cannot be renamed.");
+    }
+
+    const allExercises = await db.exercises.toArray();
+    const exactDuplicate = allExercises.some(
+      (exercise) =>
+        exercise.id !== exerciseId &&
+        exercise.muscleGroupId === existing.muscleGroupId &&
+        normalizeExerciseName(exercise.name) === normalizedName,
+    );
+
+    if (exactDuplicate) {
+      throw new Error("An exercise with this name already exists for this body part.");
+    }
+
+    const updatedExercise = {
+      ...existing,
+      name: name.trim(),
+    };
+
+    if (!isOnline()) {
+      await db.exercises.put(updatedExercise);
+      await queueItem({
+        userId,
+        status: "pending",
+        entityType: "exercise",
+        payload: {
+          action: "update",
+          exerciseId,
+          name: updatedExercise.name,
+        },
+        createdAtIso: nowIso(),
+        nextAttemptAtIso: nowIso(),
+        retries: 0,
+      });
+      return updatedExercise;
+    }
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("exercises")
+      .update({ name: updatedExercise.name })
+      .eq("user_id", userId)
+      .eq("id", exerciseId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const saved = toExercise(data as ExerciseRow);
+    await db.exercises.put(saved);
+    return saved;
+  },
+
+  async deleteExercise(exerciseId: string): Promise<void> {
+    const userId = await getAuthenticatedUserId();
+    const existing = await db.exercises.get(exerciseId);
+
+    if (!existing) {
+      throw new Error("Exercise not found.");
+    }
+
+    if (!existing.isCustom) {
+      throw new Error("Default exercises cannot be deleted.");
+    }
+
+    const hasLocalUsage = await db.workouts.where("exerciseId").equals(exerciseId).first();
+
+    if (hasLocalUsage) {
+      throw new Error("This exercise has workout history and cannot be deleted.");
+    }
+
+    if (!isOnline()) {
+      await db.exercises.delete(exerciseId);
+      await queueItem({
+        userId,
+        status: "pending",
+        entityType: "exercise",
+        payload: {
+          action: "delete",
+          exerciseId,
+        },
+        createdAtIso: nowIso(),
+        nextAttemptAtIso: nowIso(),
+        retries: 0,
+      });
+      return;
+    }
+
+    const supabase = createClient();
+    const usageCheck = await supabase
+      .from("workouts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("exercise_id", exerciseId);
+
+    if (usageCheck.error) {
+      throw new Error(usageCheck.error.message);
+    }
+
+    if ((usageCheck.count ?? 0) > 0) {
+      throw new Error("This exercise has workout history and cannot be deleted.");
+    }
+
+    const { error } = await supabase.from("exercises").delete().eq("user_id", userId).eq("id", exerciseId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await db.exercises.delete(exerciseId);
   },
 
   async saveWorkout(workout: Workout): Promise<number> {
@@ -816,6 +1123,7 @@ export const workoutRepository = {
           id: exercise.id,
           name: exercise.name,
           muscle_group_id: exercise.muscleGroupId,
+          is_custom: exercise.isCustom ?? false,
         })),
       );
 

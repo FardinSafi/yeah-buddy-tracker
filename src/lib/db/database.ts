@@ -2,7 +2,7 @@ import Dexie, { type Table } from "dexie";
 import type { AppSettings, Exercise, MilestoneEvent, MuscleGroup, Workout } from "@/types/domain";
 
 export type SyncQueueStatus = "pending" | "syncing" | "failed";
-export type SyncEntityType = "workout" | "milestone" | "setting" | "muscleGroup";
+export type SyncEntityType = "workout" | "milestone" | "setting" | "muscleGroup" | "exercise";
 
 export type SyncQueueWorkoutPayload = {
   workout: Workout;
@@ -24,11 +24,27 @@ export type SyncQueueMuscleGroupPayload = {
   weeklyTargetKg: number;
 };
 
+export type SyncQueueExercisePayload =
+  | {
+      action: "create";
+      exercise: Exercise;
+    }
+  | {
+      action: "update";
+      exerciseId: string;
+      name: string;
+    }
+  | {
+      action: "delete";
+      exerciseId: string;
+    };
+
 export type SyncQueuePayload =
   | SyncQueueWorkoutPayload
   | SyncQueueMilestonePayload
   | SyncQueueSettingPayload
-  | SyncQueueMuscleGroupPayload;
+  | SyncQueueMuscleGroupPayload
+  | SyncQueueExercisePayload;
 
 export type SyncQueueItem = {
   id?: number;

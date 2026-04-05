@@ -53,21 +53,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Handle celebration toasts
   useEffect(() => {
-    if (!celebration.open) {
+    if (!celebration) {
       return;
     }
 
-    toast.success(`Yeah Buddy! ${celebration.muscleGroupName} target smashed.`, {
-      description: celebration.quote,
-      duration: 3500,
-      style: {
-        background: "#151515",
-        color: "#f4e3b1",
-        border: "1px solid #D4AF37",
-      },
-    });
+    if (celebration.kind === "exercise-pr") {
+      toast.success(`New PR! ${celebration.exerciseName} at ${celebration.newTopSetKg} kg`, {
+        description: `Previous best: ${celebration.previousTopSetKg} kg`,
+        duration: 3500,
+        style: {
+          background: "#151515",
+          color: "#f4e3b1",
+          border: "1px solid #D4AF37",
+        },
+      });
+    } else {
+      toast.success(`Yeah Buddy! ${celebration.muscleGroupName} target smashed.`, {
+        description: celebration.quote,
+        duration: 3500,
+        style: {
+          background: "#151515",
+          color: "#f4e3b1",
+          border: "1px solid #D4AF37",
+        },
+      });
+    }
 
-    closeCelebration();
+    const timer = window.setTimeout(() => {
+      closeCelebration();
+    }, 100);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [celebration, closeCelebration]);
 
   return (

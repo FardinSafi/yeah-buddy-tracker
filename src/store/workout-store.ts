@@ -14,6 +14,8 @@ import {
   buildWeeklyStats,
   calculateWorkoutTonnage,
   countWeeklyStreak,
+  getHistoricalTopSetWeightKg,
+  getTopSetWeightKg,
   type ExerciseProgressionPoint,
   type MuscleGroupHistoryPoint,
   type WeeklySeriesPoint,
@@ -55,11 +57,20 @@ type WorkoutInput = {
   notes?: string;
 };
 
-type CelebrationState = {
-  open: boolean;
+type MilestoneCelebration = {
+  kind: "milestone";
   muscleGroupName: string;
   quote: string;
 };
+
+type PrCelebration = {
+  kind: "exercise-pr";
+  exerciseName: string;
+  previousTopSetKg: number;
+  newTopSetKg: number;
+};
+
+export type CelebrationState = MilestoneCelebration | PrCelebration | null;
 
 type WorkoutStore = {
   initialized: boolean;
@@ -83,6 +94,7 @@ type WorkoutStore = {
   exerciseProgression: ExerciseProgressionPoint[];
   quoteOfTheRefresh: string;
   celebration: CelebrationState;
+  celebrationQueue: Exclude<CelebrationState, null>[];
   bootstrap: () => Promise<void>;
   refreshStats: () => Promise<void>;
   refreshHistory: (weekCount?: number) => Promise<void>;
@@ -187,7 +199,8 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   selectedExerciseId: null,
   exerciseProgression: [],
   quoteOfTheRefresh: randomQuote(),
-  celebration: { open: false, muscleGroupName: "", quote: "" },
+  celebration: null,
+  celebrationQueue: [],
 
   bootstrap: async () => {
     try {
@@ -333,9 +346,14 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
       await workoutRepository.saveWorkout(workout);
 
+      const previousExerciseWorkouts = get().workouts.filter((entry) => entry.exerciseId === input.exerciseId);
+      const previousExerciseTopSetKg = getHistoricalTopSetWeightKg(previousExerciseWorkouts);
+      const currentExerciseTopSetKg = getTopSetWeightKg(workout.sets);
+
       const data = await workoutRepository.getBootstrapData();
       const previousStats = get().weeklyStats;
       const { weeklyStats, weeklyStreak } = toWeeklyState(data.workouts, data.muscleGroups);
+      const nextCelebrations: Exclude<CelebrationState, null>[] = [];
 
       set({
         workouts: data.workouts,
@@ -355,6 +373,16 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         await get().refreshExerciseProgression(input.exerciseId, DEFAULT_ANALYTICS_WEEKS);
       }
 
+      if (currentExerciseTopSetKg > previousExerciseTopSetKg) {
+        const exerciseName = data.exercises.find((exercise) => exercise.id === input.exerciseId)?.name ?? "This exercise";
+        nextCelebrations.push({
+          kind: "exercise-pr",
+          exerciseName,
+          previousTopSetKg: previousExerciseTopSetKg,
+          newTopSetKg: currentExerciseTopSetKg,
+        });
+      }
+
       const currentMuscle = weeklyStats.find((stat) => stat.muscleGroupId === input.muscleGroupId);
       const previousMuscle = previousStats.find((stat) => stat.muscleGroupId === input.muscleGroupId);
 
@@ -363,18 +391,26 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
         if (!exists) {
           await workoutRepository.createMilestoneEvent(input.muscleGroupId);
-
-          const isMuted = get().isMuted;
-          playYeahBuddySound(isMuted);
-
-          set({
-            celebration: {
-              open: true,
-              muscleGroupName: currentMuscle.name,
-              quote: randomQuote(),
-            },
+          nextCelebrations.push({
+            kind: "milestone",
+            muscleGroupName: currentMuscle.name,
+            quote: randomQuote(),
           });
         }
+      }
+
+      if (nextCelebrations.length > 0) {
+        const isMuted = get().isMuted;
+        playYeahBuddySound(isMuted);
+
+        set((state) => {
+          const queue = [...state.celebrationQueue, ...nextCelebrations];
+          const celebration = state.celebration ?? queue.shift() ?? null;
+          return {
+            celebration,
+            celebrationQueue: queue,
+          };
+        });
       }
     } finally {
       set({ isSaving: false });
@@ -398,7 +434,13 @@ export const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   },
 
   closeCelebration: () => {
-    set({ celebration: { open: false, muscleGroupName: "", quote: "" } });
+    set((state) => {
+      const queue = [...state.celebrationQueue];
+      return {
+        celebration: queue.shift() ?? null,
+        celebrationQueue: queue,
+      };
+    });
   },
 
   exportJson: async () => {

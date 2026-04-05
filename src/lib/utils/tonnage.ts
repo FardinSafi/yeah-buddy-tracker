@@ -28,6 +28,14 @@ export function calculateWorkoutTonnage(sets: WorkoutSet[]): number {
   return sets.reduce((sum, set) => sum + calculateSetTonnage(set), 0);
 }
 
+export function getTopSetWeightKg(sets: WorkoutSet[]): number {
+  return sets.reduce((max, set) => Math.max(max, set.weightKg), 0);
+}
+
+export function getHistoricalTopSetWeightKg(workouts: Workout[]): number {
+  return workouts.reduce((max, workout) => Math.max(max, getTopSetWeightKg(workout.sets)), 0);
+}
+
 export function buildWeeklyStats(workouts: Workout[], muscleGroups: MuscleGroup[]): WeeklyStat[] {
   const currentWeekWorkouts = workouts.filter((workout) => isDateInCurrentWeek(workout.dateIso));
 
@@ -147,6 +155,6 @@ export function buildExerciseProgression(workouts: Workout[], exerciseId: string
       dateIso: workout.dateIso,
       tonnageKg: calculateWorkoutTonnage(workout.sets),
       totalReps: workout.sets.reduce((sum, set) => sum + set.reps, 0),
-      topSetWeightKg: workout.sets.reduce((max, set) => Math.max(max, set.weightKg), 0),
+      topSetWeightKg: getTopSetWeightKg(workout.sets),
     }));
 }

@@ -20,8 +20,6 @@ export const metadata: Metadata = {
   description: "Minimalist offline-first gym workout tracker",
 };
 
-const ENABLE_APP_WALLPAPER = true;
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,21 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`} suppressHydrationWarning>
-      <body
-        suppressHydrationWarning
-        className="min-h-full bg-[#0a0a0a] text-[#f4f4f4]"
-        style={
-          ENABLE_APP_WALLPAPER
-            ? {
-                backgroundImage:
-                  "linear-gradient(rgba(10, 10, 10, 0.88), rgba(10, 10, 10, 0.88)), url('/images/ronnie-header.jpg')",
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-                backgroundAttachment: "fixed",
-              }
-            : undefined
-        }
-      >
+      <head>
+        <link rel="preload" as="audio" href="/sounds/yeah-buddy.mp3" type="audio/mpeg" />
+      </head>
+      <body suppressHydrationWarning className="min-h-full bg-[#0a0a0a] text-[#f4f4f4]">
         <AppProvider>{children}</AppProvider>
       </body>
     </html>

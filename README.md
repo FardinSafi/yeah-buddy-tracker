@@ -33,7 +33,7 @@ Implemented v1 decisions:
 - Seed exercise catalog only (no custom exercise creation yet).
 - Full local DB JSON export/import.
 - Audio on by default, user can mute.
-- Dark theme only.
+- Single fixed dark palette.
 
 ## Folder Structure
 

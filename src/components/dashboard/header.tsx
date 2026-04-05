@@ -30,6 +30,9 @@ export function DashboardHeader() {
         </p>
       </div>
       <div className="flex items-center gap-3">
+        <Link href="/settings" className="text-xs font-semibold tracking-[0.12em] text-[#c7b274] uppercase hover:text-[#f6e6b3]">
+          Settings
+        </Link>
         <Link href="/auth/sign-out" className="text-xs font-semibold tracking-[0.12em] text-[#c7b274] uppercase hover:text-[#f6e6b3]">
           Sign Out
         </Link>

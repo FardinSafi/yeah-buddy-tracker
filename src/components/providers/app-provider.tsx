@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { useWorkoutBootstrap } from "@/hooks/use-workout-bootstrap";
-import { createClient } from "@/lib/supabase/client";
+import { playYeahBuddySound, primeYeahBuddySound } from "@/lib/utils/audio";
 import { useAuthStore } from "@/store/auth-store";
 import { useWorkoutStore } from "@/store/workout-store";
 
@@ -14,22 +14,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const celebration = useWorkoutStore((state) => state.celebration);
   const closeCelebration = useWorkoutStore((state) => state.closeCelebration);
+  const isMuted = useWorkoutStore((state) => state.isMuted);
+
+  // Prime the audio buffer on mount, then play on the first user gesture.
+  useEffect(() => {
+    primeYeahBuddySound();
+  }, []);
 
   useEffect(() => {
-    void refreshSession();
+    if (isMuted) {
+      return;
+    }
 
-    const supabase = createClient();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuth(session);
-    });
+    let hasPlayed = false;
+
+    const playOnce = () => {
+      if (hasPlayed) {
+        return;
+      }
+
+      hasPlayed = true;
+      playYeahBuddySound(false);
+    };
+
+    window.addEventListener("pointerdown", playOnce, { once: true, passive: true });
+    window.addEventListener("keydown", playOnce, { once: true });
 
     return () => {
-      subscription.unsubscribe();
+      window.removeEventListener("pointerdown", playOnce);
+      window.removeEventListener("keydown", playOnce);
     };
+  }, [isMuted]);
+
+  // Initialize auth session
+  useEffect(() => {
+    void refreshSession();
   }, [refreshSession, setAuth]);
 
+  // Handle celebration toasts
   useEffect(() => {
     if (!celebration.open) {
       return;

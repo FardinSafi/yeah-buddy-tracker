@@ -38,6 +38,12 @@ supabase_connect.txt
 # vercel
 .vercel
 
+# supabase local artifacts
+supabase/.temp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*.local
